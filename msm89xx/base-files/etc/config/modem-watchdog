@@ -6,8 +6,17 @@ config watchdog 'general'
 	# idle gaps and drive the Stage-1/2/3 recovery ladder unnecessarily --
 	# Stage 2 tears the interface down, which used to hit the bam_dmux
 	# TX-slot/pm-resume race and wedge RTNL for the rest of the boot.
-	option stall_timeout '60'
-	option check_interval '10'
+	# Mobile + stationary deployments split: 60 s was tolerable only when the
+	# device sat on a single tower.  In a moving vehicle (handover-active), a
+	# 60 s quiet ring+10 s poll reads as "tries for 70 s, restarts, tries for
+	# 70 s..." -- the user experiences it as "nothing ever reconnects".
+	#
+	# Halving both values lets the watchdog notice a genuinely-stalled bearer
+	# inside one DHCP lease refresh (typically ~30 s on HSPA) instead of two,
+	# while still leaving margin above the ~16 s post-SSR rebuild.  cooldown
+	# unchanged: 60 s keeps flapping protection vs tower ping-pong.
+	option stall_timeout '30'
+	option check_interval '5'
 	option cooldown_seconds '60'
 
 config keepalive 'keepalive'
