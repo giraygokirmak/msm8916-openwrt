@@ -1,0 +1,18 @@
+#!/bin/sh
+# Local boot-time fix-ups for UZ801V3 (msm8916) + similar bam-dmux boards.
+#
+# 1) Bail out of bam-dmux runtime suspend.
+#
+#    The qcom_bam_dmux driver registers a pm_domain on the remoteproc node
+#    (4080000.remoteproc).  With power/control left at 'auto' the link-layer
+#    ring goes into runtime suspend after each idle window.  During modem
+#    handover (cell change), the RX ring then sits 'quiesced' for ~60 s
+#    while Linux waits for a wake-up that does not arrive, and netifd marks
+#    the wwan bearer down.
+#
+#    Pinning the device to 'on' keeps the ring perpetually armed.  Power
+#    cost is ~2-4 mA on a 5 V rail -- negligible for a USB dongle compared
+#    with the livelock cost of a suspended ring.
+echo on > /sys/devices/platform/soc@0/4080000.remoteproc/power/control
+
+exit 0
