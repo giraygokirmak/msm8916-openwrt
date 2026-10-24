@@ -400,12 +400,25 @@ while true; do
         STALL_COUNT=0
         BEARER_DOWN_SECS=$((BEARER_DOWN_SECS + CHECK_INTERVAL))
         NOW=$(date +%s)
-        # Only re-drive an interface that is SUPPOSED to be up.  `ubus ...
-        # down` clears autostart, so gating on autostart respects an
-        # intentional ifdown while still catching the stuck case -- the proto's
-        # `set_available 0` does NOT clear autostart.
+        # Only re-drive an interface that is SUPPOSED to be up.  We used to
+        # key this purely on `autostart`, because `ubus ... down` clears
+        # autostart and the proto's `set_available 0` does not.  That missed
+        # a third path into autostart=false: the old modemmanager proto
+        # called proto_block_restart() on a simple-connect timeout, which
+        # ended in interface_set_down() -> autostart=false even though the
+        # user never asked for `ifdown` (observed 2026-10-24: autostart
+        # stuck false from boot until manual recovery).
+        #
+        # Distinguish an intentional `ifdown` from a restart-block latch:
+        # an ifdown tears the proto down TO UNAVAILABLE (teardown ->
+        # proto_set_available 0), while the restart-block path keeps the
+        # interface available=true (the ModemManager object is still
+        # there).  So re-drive also when autostart=false but available=true;
+        # keep honouring a real ifdown (autostart=false available=false).
         IF_AUTO=$(ubus call network.interface.modem status 2>/dev/null | jsonfilter -e '@.autostart' 2>/dev/null)
-        if [ "$IF_AUTO" = "true" ] && \
+        IF_AVAIL=$(ubus call network.interface.modem status 2>/dev/null | jsonfilter -e '@.available' 2>/dev/null)
+        if { [ "$IF_AUTO" = "true" ] || \
+             { [ "$IF_AUTO" = "false" ] && [ "$IF_AVAIL" = "true" ]; }; } && \
            [ "$BEARER_DOWN_SECS" -ge "$BEARER_DOWN_RECOVER_SECS" ] && \
            [ $((NOW - LAST_BEARER_REARM)) -ge "$BEARER_REARM_COOLDOWN" ]; then
             if mmcli -L 2>/dev/null | grep -q '/Modem/'; then
